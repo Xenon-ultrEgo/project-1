@@ -1,117 +1,103 @@
-//Random quotes api
-const quoteApiUrl = "GET https://api.quotable.io/quotes?foo=bar";
-const quoteSection = document.getElementById("quote");
-const userInput = document.getElementById("quote-input");
-
-let quote = "";
-let time = 60;
-let timer = "";
+let timer;
+let startTime;
+let elapsedTime = 0;
 let mistakes = 0;
+let isTestRunning = false;
 
-//Display random quotes
-const renderNewQuote = async () => {
-    //Fetch content from quote api url
-    const response = await fetch(quoteApiUrl);
-    let data = await response.json();
-    quote = data.content;
+const quoteText = document.getElementById('quote');
+const quoteInput = document.getElementById('quote-input');
+const timerDisplay = document.getElementById('timer');
+const mistakesDisplay = document.getElementById('mistakes');
+const accuracyDisplay = document.getElementById('accuracy');
+const wpmDisplay = document.getElementById('wpm');
+const startButton = document.getElementById('start-test');
+const stopButton = document.getElementById('stop-test');
 
-    //Array of chars in quote
-    let arr = quote.split("").map((value) => {
-        return "<span class='quote-chars'>" + value + "</span>";
-    });
-    quoteSection.innerHTML += arr.join("");
-};
-
-//Logic to compare input words with quote
-userInput.addEventListener("input", () => {
-    let quoteChars = document.querySelectorAll(".quote-chars");
-    quoteChars = Array.from(quoteChars);
-
-    //Array of user input chars
-    let userInputChars = userInput.value.split("");
-    //Loop through each char in quote
-    quoteChars.forEach((char, index) => {
-        //Check chars with quote chars
-        if (char.innerText == userInputChars[index]) {
-            char.classList.add("success");
-        }
-        //If user hasn't entered anything or backspaced
-        else if (userInputChars[index] == null) {
-            if (char.classList.contains("success")) {
-                char.classList.remove("success");
-            } else {
-                char.classList.remove("fail");
-            }
-        }
-        //if user entered wrong char
-        else {
-            if (!char.classList.contains("fail")) {
-                //increament and displaying mistakes
-                mistakes++;
-                char.classList.add("fail");
-            }
-            document.getElementById("mistakes").innerText = mistakes;
+// Fetch a random quote from the Quotable API
+async function getRandomQuote() {
+    try {
+        const response = await fetch('https://api.quotable.io/quotes?foo=bar');
+        
+        // Check if the request was successful (status code 200)
+        if (!response.ok) {
+            throw new Error('Failed to fetch quote');
         }
 
-        //Return true if all chars are correct
-        let check = quoteChars.every((element) => {
-            return element.classList.contains("success");
-        });
-
-        //End test if all chars are correct
-        if (check) {
-            displayResult();
-        }
-
-    });
-
-});
-
-//Update timer
-function updateTimer() {
-    if (time == 0) {
-        //End test if reaches 0
-        displayResult();
-    } else {
-        document.getElementById("timer").innerText = --time + "s";
+        const data = await response.json();
+        return data.content; // The actual quote text
+    } catch (error) {
+        console.error('Error fetching quote:', error);
+        return 'Error fetching quote. Please try again.'; // Fallback message
     }
 }
 
-//Set timer
-const timeReduce = () => {
-    time = 60;
+async function startTest() {
+    // Fetch a random quote from the API
+    const randomQuote = await getRandomQuote();
+    quoteText.textContent = randomQuote;
+    
+    // Show stop button and hide start button
+    startButton.style.display = 'none';
+    stopButton.style.display = 'inline-block';
+
+    // Start the timer
+    startTime = Date.now();
     timer = setInterval(updateTimer, 1000);
-};
 
-//End test
-const displayResult = () => {
-    //Display result div
-    document.querySelector(".result").style.display = "block";
-    clearInterval(timer);
-    document.getElementById("stop-test").style.display = "none";
-    userInput.disabled = true;
-    let timeTaken = 1;
-    if (time != 0) {
-        timeTaken = (60 - time) / 100;
-    }
-    document.getElementById("wpm").innerText = (userInput.value.length / 5 / timeTaken).toFixed(2) + "wpm";
-    document.getElementById("accuracy").innerText = Math.round(((userInput.value.length - mistakes) / userInput.value.length) * 100) + "%";
-};
-
-//Start test
-const startTest = () => {
+    // Reset variables
+    elapsedTime = 0;
     mistakes = 0;
-    timer = "";
-    userInput.disabled = false;
-    timeReduce();
-    document.getElementById("start-test").style.display = "none";
-    document.getElementById("stop-test").style.display = "block";
-};
+    isTestRunning = true;
+}
 
-window.onload = () => {
-    userInput.value = "";
-    document.getElementById("start-test").style.display = "block";
-    document.getElementById("stop-test").style.display = "none";
-    userInput.disabled = true;
-    renderNewQuote();
+function updateTimer() {
+    if (isTestRunning) {
+        elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+        timerDisplay.textContent = `${elapsedTime}s`;
+    }
+}
+
+function displayResult() {
+    isTestRunning = false;
+    clearInterval(timer);
+
+    // Calculate mistakes
+    const typedText = quoteInput.value.trim();
+    mistakes = countMistakes(quoteText.textContent, typedText);
+    mistakesDisplay.textContent = mistakes;
+
+    // Calculate speed (words per minute)
+    const timeInMinutes = elapsedTime / 60;
+    const wordsTyped = typedText.split(' ').length;
+    const speed = Math.floor(wordsTyped / timeInMinutes);
+    wpmDisplay.textContent = `${speed} WPM`;
+
+    // Calculate accuracy
+    const accuracy = calculateAccuracy(quoteText.textContent, typedText);
+    accuracyDisplay.textContent = `${accuracy}%`;
+
+    // Hide stop button and show start button again
+    startButton.style.display = 'inline-block';
+    stopButton.style.display = 'none';
+}
+
+function countMistakes(originalText, typedText) {
+    let mistakes = 0;
+    const originalWords = originalText.split(' ');
+    const typedWords = typedText.split(' ');
+
+    for (let i = 0; i < originalWords.length; i++) {
+        if (originalWords[i] !== typedWords[i]) {
+            mistakes++;
+        }
+    }
+    return mistakes;
+}
+
+function calculateAccuracy(originalText, typedText) {
+    const originalWords = originalText.split(' ').length;
+    const typedWords = typedText.split(' ').length;
+    
+    const correctWords = originalWords - mistakes;
+    return Math.floor((correctWords / originalWords) * 100);
 }
